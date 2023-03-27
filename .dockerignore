@@ -1,0 +1,8 @@
+.idea/workspace.xml
+venv/
+venv/.Python
+venv/.gitignore
+venv/bin/
+venv/lib/
+venv/pyvenv.cfg
+.git

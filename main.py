@@ -130,9 +130,8 @@ class Widget:
 
 
 
-
+widget = Widget()
+app.include_router(widget.router)
 
 if __name__ == "__main__":
-    widget = Widget()
-    app.include_router(widget.router)
     uvicorn.run(app, host="0.0.0.0", port=8000)
