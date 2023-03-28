@@ -43,10 +43,16 @@ class Widget:
         self.router.add_api_route("/set_login_password/{new_pass}", self.set_login_password, methods=["GET"])
         self.router.add_api_route("/stats", self.get_stats, methods=["GET"])
         self.router.add_api_route("/refresh_stats", self.refresh_stats, methods=["GET"])
+        self.router.add_api_route("/current_stats", self.current_stats, methods=["GET"])
         self.total_gain = 0
         self.days_value = 0
         self.total = 0
 
+    def current_stats(self):
+        result = self.refresh_stats()
+        if result["result"] != "success":
+            return result
+        return self.get_stats()
 
     def set_login_password(self, new_pass: str, master_password: str):
         master_password = bytes(master_password, "utf-8")
