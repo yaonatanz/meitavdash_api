@@ -44,36 +44,12 @@ class Widget:
         self.router.add_api_route("/stats", self.get_stats, methods=["GET"])
         self.router.add_api_route("/refresh_stats", self.refresh_stats, methods=["GET"])
         self.router.add_api_route("/current_stats", self.current_stats, methods=["GET"])
+        self.router.add_api_route("/portfolio_table", self.get_portfolio_table, methods=["GET"])
         self.total_gain = 0
         self.days_value = 0
         self.total = 0
 
-    def current_stats(self):
-        result = self.refresh_stats()
-        if result["result"] != "success":
-            return result
-        return self.get_stats()
-
-    def set_login_password(self, new_pass: str, master_password: str):
-        master_password = bytes(master_password, "utf-8")
-        new_pass = bytes(new_pass, "utf-8")
-
-        status = "fail"
-
-        if master_password != config_master_password:
-            status = "Bad Authentication"
-            return {"result": status}
-
-        with open("auth.key", "wb") as f:
-            f.write(new_pass)
-            status = "success"
-
-        return {"result": status}
-
-    def get_stats(self):
-        return {"total_gain": self.total_gain, "day_change": self.days_value, "total": self.total}
-
-    def refresh_stats(self):
+    def login(self):
         password = get_password()
         if password is None:
             return {"result": "Password haven't been initialized"}
@@ -111,15 +87,55 @@ class Widget:
         )
 
         dwrcookie = re.findall('handleCallback\(\"0\",\"0\",\"(.*)\"\);', response.text)[0]
-        pageId = tokenify(int(time.time())) + "-" + tokenify(int(random.random() * 1E16));
-        full_cookie = dwrcookie + "/" + pageId
-
+        
         cookies = {
             'JSESSIONID': jsessionid,
             'DWRSESSIONID': dwrcookie,
         }
 
+        return cookies
+
+
+    def current_stats(self):
+        result = self.refresh_stats()
+        if result["result"] != "success":
+            return result
+        return self.get_stats()
+
+    def set_login_password(self, new_pass: str, master_password: str):
+        master_password = bytes(master_password, "utf-8")
+        new_pass = bytes(new_pass, "utf-8")
+
+        status = "fail"
+
+        if master_password != config_master_password:
+            status = "Bad Authentication"
+            return {"result": status}
+
+        with open("auth.key", "wb") as f:
+            f.write(new_pass)
+            status = "success"
+
+        return {"result": status}
+
+    def get_stats(self):
+        return {"total_gain": self.total_gain, "day_change": self.days_value, "total": self.total}
+
+    def refresh_stats(self):
+        try:
+            cookies = self.login()
+            dwrcookie = cookies["DWRSESSIONID"]
+        except Exception:
+            #failed login
+            return {"result": "Failed to authenticate"}
+        pageId = tokenify(int(time.time())) + "-" + tokenify(int(random.random() * 1E16));
+        full_cookie = dwrcookie + "/" + pageId
+
         data = f'callCount=1\nnextReverseAjaxIndex=0\nc0-scriptName=RemoteInterface\nc0-methodName=getPortfolioTotals\nc0-id=0\nbatchId=5\ninstanceId=0\npage=%2Fsecure%2F\nscriptSessionId={full_cookie}\n'
+        headers = {
+            'Connection': 'keep-alive',
+            'Content-Type': 'text/plain',
+        }
 
         response = requests.post(
             'https://meitav.viewtrade.com/secure/dwr//call/plaincall/RemoteInterface.getPortfolioTotals.dwr',
@@ -133,6 +149,32 @@ class Widget:
         self.days_value = re.findall("DaysValue:(.*?),", response.text)[0]
         self.total = re.findall("Total:(.*?),", response.text)[0]
         return {"result": "success"}
+    
+    def get_portfolio_table(self):
+        try:
+            cookies = self.login()
+            dwrcookie = cookies["DWRSESSIONID"]
+        except Exception:
+            #failed login
+            return {"result": "Failed to authenticate"}
+        params = {
+            'exportPortfolio': '',
+        }
+
+        response = requests.get(
+            'https://meitav.viewtrade.com/secure/ExportToExcel.action',
+            params=params,
+            cookies=cookies,
+        )
+        data = [i.split("\t") for i in response.text.split("\n")]
+        rows = data[0]
+        totals = data[-1]
+        response = {}
+        response["Totals"] = {"Total": data[-2][-1], "Day move": data[-2][-5]}
+        response["Symbols"] = {}
+        for i in data[1:-2]:
+            response["Symbols"][i[0]] = dict([(rows[k],i[k]) for k in range(1, len(rows)-1)])
+        return response
 
 
 
